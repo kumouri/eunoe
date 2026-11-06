@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eunoe"
+version = "0.1.0.dev0"
+description = "Contracting context for LLM agents: an experiment kit, offline by default."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Ceryce Armstrong" }]
+dependencies = []
+
+[project.scripts]
+eunoe = "eunoe.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+eunoe = ["cost/prices/*.json"]
