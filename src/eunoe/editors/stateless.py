@@ -169,32 +169,6 @@ class ClaudeApiHarness(_Stateless):
         return Turn(text, claude_usage(data.get("usage") or {}), data.get("id", ""))
 
 
-class ClaudeApiServerHarness(ClaudeApiHarness):
-    """The server-side edits, which is what controls C1 and C4 use when they run for real.
-
-    The steps differ from a client edit: the server clears or compacts, and the client's history stays
-    full. So the codeword steps prove the same thing through `context_management`.
-    """
-
-    name = "claude-api-server"
-    apply_supported = False
-
-    def context_management_body(self, messages: list, edits: list) -> dict:
-        return self.request_body(messages, context_management={"edits": edits})
-
-    def clear_tool_uses_edit(self, keep: int = 1, trigger: int = 1, clear_at_least: int = 0) -> dict:
-        edit = {"type": "clear_tool_uses_20250919", "trigger": {"type": "input_tokens", "value": trigger},
-                "keep": {"type": "tool_uses", "value": keep}}
-        if clear_at_least:
-            edit["clear_at_least"] = {"type": "input_tokens", "value": clear_at_least}
-        return edit
-
-    def send_with_edits(self, messages: list, edits: list, *betas) -> tuple:
-        self.gate.check(self.name)
-        return self.transport(ANTHROPIC_URL, self.headers(*(betas or (BETA_CONTEXT_EDITING,))),
-                              self.context_management_body(messages, edits))
-
-
 class OpenAiResponsesHarness(_Stateless):
     """The Responses API sent whole. `previous_response_id` would hide the list, so it is never used."""
 

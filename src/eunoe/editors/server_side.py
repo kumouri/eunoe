@@ -7,7 +7,6 @@ harness, so it needs a funded key and `--allow-spend`, and it is tested offline 
 """
 from __future__ import annotations
 
-from eunoe.drivers.base import http_post
 from eunoe.editors.stateless import ANTHROPIC_URL, BETA_COMPACTION, BETA_CONTEXT_EDITING, ClaudeApiHarness
 from eunoe.editors.claude_cli import claude_usage
 from eunoe.interfaces import ConformanceReport, StepResult
@@ -48,7 +47,7 @@ class ClaudeServerHarness(ClaudeApiHarness):
                                "What codeword did the tool return? Reply with only the codeword, or UNKNOWN."}]}]
         status, cleared = self._post(ask, {"edits": [edit]}, BETA_CONTEXT_EDITING)
         steps.append(self._result("2 clear_tool_uses", status, cleared, lambda d: codeword not in _text(d)))
-        if status == 200 and status == 200:
+        if status == 200:
             before = claude_usage(full.get("usage") or {}).context
             after = claude_usage(cleared.get("usage") or {}).context
             steps.append(StepResult("3 shrink", "PASS" if after < before else "FAIL", "server edit shrank the context",
@@ -80,5 +79,3 @@ class ClaudeServerHarness(ClaudeApiHarness):
 def _text(data: dict) -> str:
     return "".join(b.get("text", "") for b in data.get("content") or [] if b.get("type") == "text")
 
-
-__all__ = ["ClaudeServerHarness", "http_post"]

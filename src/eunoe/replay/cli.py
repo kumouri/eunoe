@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import os
 
 from eunoe.replay.surface import rates, real_cost, replay_cost, schedule_grid
 from eunoe.replay.usage import read_usage
@@ -39,5 +38,3 @@ def main(args) -> int:
             print(f"  {ratio:>7}  {name}")
     return 0
 
-
-__all__ = ["main", "os"]

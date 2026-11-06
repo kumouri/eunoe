@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 
 from eunoe.cachesim import PrefixCache, ThinkingBindingError
-from eunoe.interfaces import CallUsage, DriverCaps, ModelTurn, RenderedContext, ToolCall
+from eunoe.interfaces import DriverCaps, ModelTurn, RenderedContext, ToolCall
 from eunoe.levels import estimate_tokens
 from eunoe.rng import Rng
 
@@ -101,5 +101,3 @@ def _single_shaped_token(blocks: list, subject: str, prefix: str) -> str | None:
             return None
     return found
 
-
-__all__ = ["ScriptedDriver", "CallUsage"]

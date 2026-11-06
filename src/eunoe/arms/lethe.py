@@ -16,7 +16,7 @@ from eunoe import levels
 from eunoe.arms.strategies import RECALL_TOOL, Strategy
 from eunoe.interfaces import Block as EunoeBlock
 from eunoe.interfaces import CallUsage, RenderedContext
-from eunoe.ledger import ASSISTANT, THINKING, USER
+from eunoe.ledger import ASSISTANT, THINKING
 
 
 class LetheNotInstalled(RuntimeError):
@@ -91,7 +91,7 @@ class LetheStrategy(Strategy):
         content = spec.text if not spec.input else f"{spec.kind[5:]} {spec.input}\n{spec.text}"
         label = spec.kind if not spec.input else f"{spec.kind[5:]} {next(iter(spec.input.values()), '')}"
         self.session.add(self._block(id=f"b{self.counter:05d}", role=role, kind=kind, content=content,
-                                     created_step=self.step, pinned=spec.kind == USER and False, meta={"label": label}))
+                                     created_step=self.step, meta={"label": label}))
 
     def prepare(self, now: float, last: CallUsage | None, gap_s: float) -> RenderedContext:
         before = self.session.stats()["evicted"]

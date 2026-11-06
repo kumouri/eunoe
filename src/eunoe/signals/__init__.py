@@ -6,7 +6,7 @@ outside: a small model's rating at write time, and a table an ablation study pro
 """
 from __future__ import annotations
 
-from eunoe.ledger import ASSISTANT, FILE, SYSTEM_NOTE, THINKING, USER, Event, Ledger
+from eunoe.ledger import ASSISTANT, FILE, SYSTEM_NOTE, USER, Event, Ledger
 from eunoe.rng import Rng
 
 #: A taxonomy prior, hand-set. Reported as a default a study can replace, not as a measurement.
@@ -133,4 +133,4 @@ def get_signal(name: str, **kwargs):
         raise ValueError(f"unknown signal {name!r}, one of {sorted(SIGNALS)}") from None
 
 
-__all__ = ["SIGNALS", "get_signal", "kind_prior", "age_band", "THINKING"]
+__all__ = ["SIGNALS", "get_signal", "kind_prior", "age_band"]

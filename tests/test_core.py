@@ -13,6 +13,7 @@ from eunoe.schedules import EveryN, Expiry, ExpiryThreshold, Generational, Never
 from eunoe.signals import SIGNALS, get_signal
 from eunoe.wire import canonical, to_anthropic, to_chat_messages, to_gemini, to_openai_input, to_text
 
+PINNED_STREAM = [832, 162, 600, 362, 902]
 LOG = "\n".join([f"line {i} ok" for i in range(400)] + ["ERROR failed at token RB-AAAA-11"] + [f"tail {i}" for i in range(400)])
 
 
@@ -430,14 +431,11 @@ class StatsTest(unittest.TestCase):
 class RngTest(unittest.TestCase):
     def test_the_stream_is_pinned(self):
         rng = Rng("pin", 1)
-        self.assertEqual([rng.randint(0, 999) for _ in range(5)], [Rng("pin", 1).randint(0, 999)] + [
-            r for r in _rest()])
+        self.assertEqual([rng.randint(0, 999) for _ in range(5)], PINNED_STREAM)
 
-
-def _rest():
-    rng = Rng("pin", 1)
-    rng.randint(0, 999)
-    return [rng.randint(0, 999) for _ in range(4)]
+    def test_shuffle_and_child_are_seeded(self):
+        self.assertEqual(Rng("a").shuffle([1, 2, 3, 4]), Rng("a").shuffle([1, 2, 3, 4]))
+        self.assertNotEqual(Rng("a").child("x").random(), Rng("a").child("y").random())
 
 
 if __name__ == "__main__":

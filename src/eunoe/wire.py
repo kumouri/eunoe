@@ -12,10 +12,6 @@ def canonical(block: Block) -> str:
                       sort_keys=True, ensure_ascii=False)
 
 
-def _with_prompt(ctx: RenderedContext) -> list:
-    return list(ctx.blocks)
-
-
 def to_anthropic(ctx: RenderedContext, thinking_replay: bool = True) -> dict:
     """`{system, messages, tools}` for the Messages API. Contiguous same-role blocks merge into one turn."""
     messages: list = []
