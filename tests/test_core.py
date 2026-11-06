@@ -1,7 +1,7 @@
 import unittest
 
 from eunoe.analysis import holm, paired_bootstrap
-from eunoe.cachesim import PrefixCache, ThinkingBindingError
+from eunoe.cachesim import LOOKBACK_POSITIONS, PrefixCache, ThinkingBindingError, positions
 from eunoe.cost import ListPrice
 from eunoe.interfaces import Block, Budget, CallUsage, EvictionPolicy, ImportanceSignal, RenderedContext, Renderer, Schedule, ScheduleState, ToolSpec
 from eunoe.ledger import ASSISTANT, FILE, SYSTEM_NOTE, THINKING, USER, Ledger
@@ -356,6 +356,9 @@ class CacheSimTest(unittest.TestCase):
     def _ctx(self, *texts) -> RenderedContext:
         return RenderedContext("", [Block("user", "text", text=t) for t in texts])
 
+    def test_the_rule_is_the_documented_twenty(self):
+        self.assertEqual(LOOKBACK_POSITIONS, 20)
+
     def test_a_prefix_reads_and_the_rest_writes(self):
         cache = PrefixCache("5m")
         first = cache.call(self._ctx("a" * 400, "b" * 400), 0.0)
@@ -364,11 +367,51 @@ class CacheSimTest(unittest.TestCase):
         self.assertEqual(second.cache_read, first.cache_write)
         self.assertGreater(second.cache_write_5m, 0)
 
-    def test_an_edit_restarts_the_cache_at_the_edit(self):
+    def test_an_edit_reads_back_only_as_far_as_an_earlier_entry(self):
         cache = PrefixCache("5m")
-        cache.call(self._ctx("a" * 400, "b" * 400, "c" * 400), 0.0)
-        edited = cache.call(self._ctx("a" * 400, "B" * 400, "c" * 400), 1.0)
-        self.assertEqual(edited.cache_read, estimate_tokens("a" * 400) + 3)
+        cache.call(self._ctx("a" * 400), 0.0)
+        cache.call(self._ctx("a" * 400, "b" * 400), 1.0)
+        cache.call(self._ctx("a" * 400, "b" * 400, "c" * 400), 2.0)
+        edited = cache.call(self._ctx("a" * 400, "b" * 400, "C" * 400), 3.0)
+        self.assertEqual(edited.cache_read, 2 * (estimate_tokens("a" * 400) + 3))
+
+    def test_a_request_past_the_lookback_window_misses_with_every_byte_unchanged(self):
+        short = [f"m{i}" for i in range(19)]
+        cache = PrefixCache("5m")
+        cache.call(self._ctx(*short[:1]), 0.0)
+        self.assertGreater(cache.call(self._ctx(*short), 1.0).cache_read, 0)
+        far = [f"m{i}" for i in range(25)]
+        cache = PrefixCache("5m")
+        cache.call(self._ctx(*far[:1]), 0.0)
+        self.assertEqual(cache.call(self._ctx(*far), 1.0).cache_read, 0)
+
+    def test_a_second_breakpoint_reaches_back_past_the_window(self):
+        far = [f"m{i}" for i in range(25)]
+        cache = PrefixCache("5m")
+        cache.call(self._ctx(*far[:1]), 0.0)
+        ctx = self._ctx(*far)
+        ctx.meta["breakpoints"] = [0]
+        self.assertGreater(cache.call(ctx, 1.0).cache_read, 0)
+
+    def test_tool_runs_collapse_to_one_position(self):
+        blocks = [Block("assistant", "tool_use", name="t", tool_id=str(i)) for i in range(5)]
+        blocks += [Block("user", "tool_result", text="r", tool_id=str(i)) for i in range(5)]
+        blocks += [Block("user", "text", text="q")]
+        self.assertEqual(positions(blocks)[-1], 2)
+
+    def test_a_frozen_region_keeps_its_reads_through_an_edit(self):
+        stem = [f"m{i}" * 50 for i in range(10)]
+        cache = PrefixCache("5m")
+        first = self._ctx(*stem)
+        first.meta["breakpoints"] = [4]
+        cache.call(first, 0.0)
+        edited = self._ctx(*stem[:5], "changed", *stem[6:])
+        edited.meta["breakpoints"] = [4]
+        kept = cache.call(edited, 1.0).cache_read
+        self.assertEqual(kept, sum(estimate_tokens(s) + 3 for s in stem[:5]))
+        plain = PrefixCache("5m")
+        plain.call(self._ctx(*stem), 0.0)
+        self.assertEqual(plain.call(self._ctx(*stem[:5], "changed", *stem[6:]), 1.0).cache_read, 0)
 
     def test_expiry_kills_the_cache(self):
         cache = PrefixCache("5m")

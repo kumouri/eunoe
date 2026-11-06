@@ -12,13 +12,20 @@ def canonical(block: Block) -> str:
                       sort_keys=True, ensure_ascii=False)
 
 
-def to_anthropic(ctx: RenderedContext, thinking_replay: bool = True) -> dict:
-    """`{system, messages, tools}` for the Messages API. Contiguous same-role blocks merge into one turn."""
+def to_anthropic(ctx: RenderedContext, thinking_replay: bool = True, breakpoints=(), cache_control=None) -> dict:
+    """`{system, messages, tools}` for the Messages API. Contiguous same-role blocks merge into one turn.
+
+    `breakpoints` names block indexes that get `cache_control`, on top of the request's own. A lookup only checks 20
+    positions back, so a second breakpoint is what keeps a read reachable after a large gap or an edit past it.
+    """
     messages: list = []
-    for block in ctx.blocks:
+    marked = set(breakpoints)
+    for index, block in enumerate(ctx.blocks):
         content = _anthropic_block(block, thinking_replay)
         if content is None:
             continue
+        if index in marked and cache_control:
+            content["cache_control"] = dict(cache_control)
         if messages and messages[-1]["role"] == block.role:
             messages[-1]["content"].append(content)
         else:

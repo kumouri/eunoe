@@ -3,6 +3,10 @@
 Same calls, same output, same new input. A schedule says when an edit lands and to what size. `static` and
 `post_compact` are assumptions you set, not measurements this kit carries: the unedited prefix, and the context a
 compaction leaves. Measure your own and pass them. Dollars are at list, for comparing schedules, not a bill.
+
+The "half frozen" row assumes a cache entry exists at the frozen region's end. A lookup checks only 20 positions back,
+so that takes an explicit breakpoint there, which an API driver can place and a CLI can't. Read that row as an API
+figure. On a CLI, expect an edit to fall back to the floor, as the conformance suite shows.
 """
 from __future__ import annotations
 

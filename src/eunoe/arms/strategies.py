@@ -133,6 +133,17 @@ class ContractingStrategy(Strategy):
         self.schedule.note_edit(self.ledger.tokens_held(), target, pre)
         self.edits += 1
 
+    def prepare(self, now, last, gap_s):
+        ctx = super().prepare(now, last, gap_s)
+        frozen = self.schedule.state.frozen_upto
+        if frozen >= 0:
+            # Reads survive an edit only as far back as a cache entry. So the region's end needs a breakpoint.
+            last_id = self.ledger.events[frozen].id
+            ends = [i for i, block in enumerate(ctx.blocks) if block.event_id and block.event_id <= last_id]
+            if ends:
+                ctx.meta["breakpoints"] = [ends[-1]]
+        return ctx
+
     def _frozen_boundary(self, want: float) -> int:
         total, boundary = 0, -1
         for event in self.ledger.events:

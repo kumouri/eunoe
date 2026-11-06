@@ -20,6 +20,7 @@ import json
 import os
 import shutil
 import tempfile
+import time
 import uuid
 
 from eunoe.drivers.base import is_offline, run_cli, scrubbed_env
@@ -162,6 +163,26 @@ class ClaudeCliHarness(Harness):
         self.current = session_id
         return SessionRef(self.name, session_id)
 
+    def append_rows(self, rendered: RenderedContext) -> int:
+        """New events on the end of the current session, chained to its newest row. Returns how many rows."""
+        path = self.session_path()
+        parent = None
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if row.get("uuid") and row.get("type") in ("user", "assistant", "attachment", "system"):
+                    parent = row["uuid"]
+        rows = session_rows(rendered, self.current, self._dir(), self.version().split(" ")[0] or "0", self.model,
+                            parent=parent, stamp=time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()),
+                            salt=str(os.path.getsize(path)), continuation=True)
+        with open(path, "a", encoding="utf-8", newline="\n") as fh:
+            for row in rows:
+                fh.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+        return len(rows)
+
     def cleanup(self) -> None:
         for session_id in self.sessions:
             path = self.session_path(session_id)
@@ -171,9 +192,11 @@ class ClaudeCliHarness(Harness):
                 sidecar = os.path.join(folder, session_id)
                 if os.path.isdir(sidecar):
                     shutil.rmtree(sidecar, ignore_errors=True)
-                if os.path.basename(folder).find("eunoe-conform-") >= 0 and not os.listdir(folder):
-                    os.rmdir(folder)
         if self.scratch:
+            # The project folder is named for our own scratch directory, so all of it is ours.
+            slug = _project_slug(self.scratch)
+            if "eunoe-conform-" in slug:
+                shutil.rmtree(os.path.join(self.config_dir, "projects", slug), ignore_errors=True)
             shutil.rmtree(self.scratch, ignore_errors=True)
 
 
@@ -189,13 +212,16 @@ def _project_slug(cwd: str) -> str:
     return "".join(c if c.isalnum() else "-" for c in os.path.realpath(cwd))
 
 
-def session_rows(rendered: RenderedContext, session_id: str, cwd: str, version: str, model: str) -> list:
+def session_rows(rendered: RenderedContext, session_id: str, cwd: str, version: str, model: str, *, parent=None,
+                 stamp: str = "2030-01-01T00:00:00.000Z", salt: str = "", continuation: bool = False) -> list:
     """A rendered context as session rows: a chain of user and assistant messages."""
     wire = to_anthropic(rendered, thinking_replay=False)
-    rows, parent = [], None
-    stamp = "2030-01-01T00:00:00.000Z"
-    for i, message in enumerate(wire["messages"]):
-        uid = str(uuid.UUID(hashlib.md5(f"{session_id}:{i}".encode()).hexdigest()))
+    messages = wire["messages"]
+    if continuation and rendered.blocks and rendered.blocks[0].role == "assistant":
+        messages = messages[1:]  # to_anthropic opens a new conversation with a user turn; this one is already open
+    rows = []
+    for i, message in enumerate(messages):
+        uid = str(uuid.UUID(hashlib.md5(f"{session_id}:{salt}:{i}".encode()).hexdigest()))
         row = {"parentUuid": parent, "isSidechain": False, "type": message["role"], "uuid": uid, "timestamp": stamp,
                "userType": "external", "entrypoint": "sdk-cli", "cwd": cwd, "sessionId": session_id, "version": version}
         if message["role"] == "user":

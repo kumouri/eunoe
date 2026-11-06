@@ -24,6 +24,13 @@ are three ways to make that cheaper without any provider change: a batch at a th
 the cache has already expired, and a generational layout that leaves a frozen region ahead of the first
 edit, so reads survive up to it.
 
+**A lookup only reaches 20 positions back [D].** A request that lands more than 20 positions past the last cache
+entry misses it, with every byte unchanged, and a read survives an edit only as far back as an entry. So a frozen
+region is worth something only with a breakpoint at its end. An API driver can place one. A CLI can't, so the
+generational schedule is an API factor until a CLI run shows otherwise. A long burst of events between calls also
+loses the cache, on any door without a second breakpoint, so a fixture on a CLI has to pace its calls
+(`paced_every`). `cachesim.py` models all of this.
+
 There is a newer second constraint. On recent Claude models, editing an earlier turn on the client also
 fails a check on every later thinking block, and accounts created on or after 2026-08-31 get a 400 for it
 [D]. So `thinking_policy` is a declared factor in every manifest, and the conformance suite tests it per

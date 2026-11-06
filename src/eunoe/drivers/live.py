@@ -15,8 +15,8 @@ from eunoe.editors.claude_cli import ClaudeCliHarness, claude_usage
 from eunoe.editors.stateless import (
     ANTHROPIC_URL, BETA_COMPACTION, BETA_CONTEXT_EDITING, BETA_THINKING_CONTROLS, ClaudeApiHarness,
 )
-from eunoe.interfaces import CallUsage, DriverCaps, ModelTurn, RenderedContext, ToolCall
-from eunoe.wire import to_anthropic
+from eunoe.interfaces import Block, CallUsage, DriverCaps, ModelTurn, RenderedContext, ToolCall
+from eunoe.wire import canonical, to_anthropic
 
 
 class ClaudeApiDriver:
@@ -29,7 +29,12 @@ class ClaudeApiDriver:
         self.model = model
 
     def request(self, ctx: RenderedContext) -> tuple:
-        wire = to_anthropic(ctx, thinking_replay=False)
+        control = {"type": "ephemeral"}
+        if self.harness.ttl == "1h":
+            control["ttl"] = "1h"
+        # Automatic caching holds one of the four slots, and this request has one for the frozen region at most.
+        points = list(ctx.meta.get("breakpoints", ()))[-3:]
+        wire = to_anthropic(ctx, thinking_replay=False, breakpoints=points, cache_control=control)
         body = self.harness.request_body(wire["messages"])
         for key in ("system", "tools"):
             if key in wire:
@@ -65,10 +70,17 @@ class ClaudeApiDriver:
 
 
 class ClaudeCliDriver:
-    """The CLI on its own login: each call writes the rendered context into a session, then resumes it.
+    """The CLI on its own login, keeping one session the way a real one is kept.
 
-    The prompt is the context's last block. Tools are not offered through this door, so a lookup comes back
-    as text: a line `RECALL: <query>`, which the driver turns into a tool call. An `apply` is the same.
+    New events are appended to the session file, and a pacing turn resumes in place, so its entries stay readable. A
+    probe or a task forks, so asking never teaches the model the fact, and the session behind it is untouched. Only an
+    edit rewrites the file, and that restarts the cache at the floor, which is what an edit costs on this door.
+
+    Writing a new file for every call would look equivalent and cost far more: a new session's opening rows land
+    somewhere else each time, so no request can read the last one's entry. Measured: 3,100 read against 5.9 million
+    written over 38 calls.
+
+    Tools are not offered through this door, so a lookup comes back as text: a line `TOOL <name> <JSON arguments>`.
     """
 
     def __init__(self, model: str = "claude-haiku-5-5", gate=None, ttl: str = "1h", environ=None) -> None:
@@ -76,23 +88,45 @@ class ClaudeCliDriver:
         self.capabilities = DriverCaps("claude-cli", "account", ("1h",), spends=False)
         self.ttl = ttl
         self.model = model
+        self.written: list = []
+        self.rewrites = 0
+
+    def _sync(self, blocks: list) -> None:
+        """Bring the session file up to `blocks`: append if nothing earlier changed, rewrite if something did."""
+        keys = [canonical(b) for b in blocks]
+        if self.harness.current and keys[:len(self.written)] == self.written:
+            fresh = blocks[len(self.written):]
+            if fresh:
+                self.harness.append_rows(RenderedContext("", fresh))
+        else:
+            self.harness.apply(None, RenderedContext("", list(blocks)))
+            self.rewrites += 1
+        self.written = keys
 
     def call(self, request: RenderedContext) -> ModelTurn:
         if request.system:
             self.harness.extra_args = ["--append-system-prompt", request.system]
         prompt = request.blocks[-1].text if request.blocks else ""
-        history = RenderedContext(request.system, list(request.blocks[:-1]), request.tools, request.meta)
+        history = [b for b in request.blocks[:-1] if b.event_id]
+        lookups = [b for b in request.blocks[:-1] if not b.event_id]
+        forked = bool(request.meta.get("mode")) or bool(lookups)
+        if lookups:
+            prompt = "\n".join(f"Lookup result:\n{b.text}" for b in lookups if b.type == "tool_result") + "\n\n" + prompt
         if request.tools:
             prompt += _TEXT_TOOLS.format(names="; ".join(f"{t.name} {_arg_names(t)}" for t in request.tools))
         started = time.monotonic()
-        if history.blocks:
-            self.harness.apply(None, history)
-            turn = self.harness.resume(prompt)
+        if history or self.harness.current:
+            self._sync(history)
+            turn = self.harness.fork(prompt) if forked else self.harness.resume(prompt)
         else:
             turn = self.harness.start(prompt)
         latency = time.monotonic() - started
         if turn.error:
             return ModelTurn(error=turn.error, latency_s=latency)
+        if not forked:
+            # The CLI wrote this turn into the session itself, so it counts as written.
+            self.written += [canonical(Block("user", "text", text=request.blocks[-1].text if request.blocks else "")),
+                             canonical(Block("assistant", "text", text=turn.text or " "))]
         return _from_text(turn.text, turn.usage, latency)
 
     def close(self) -> None:
@@ -104,7 +138,8 @@ _TEXT_TOOLS = ("\n\nNo tools are callable here. To use one, reply with one line 
 
 
 def _arg_names(tool) -> str:
-    return json.dumps(sorted((tool.schema.get("properties") or {})))
+    """An example object: shown a bare list of names, a model answers with a bare list of values."""
+    return json.dumps({name: "..." for name in sorted(tool.schema.get("properties") or {})})
 
 
 def _from_text(text: str, usage: CallUsage, latency: float) -> ModelTurn:
@@ -117,7 +152,8 @@ def _from_text(text: str, usage: CallUsage, latency: float) -> ModelTurn:
                     args = json.loads(parts[2])
                 except ValueError:
                     continue
-                return ModelTurn("", [ToolCall(f"text-{i}", parts[1], args)], usage, latency)
+                if isinstance(args, dict):
+                    return ModelTurn("", [ToolCall(f"text-{i}", parts[1], args)], usage, latency)
     return ModelTurn(text, [], usage, latency)
 
 

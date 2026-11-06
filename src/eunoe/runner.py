@@ -2,6 +2,9 @@
 
 Probes are forks: a question and its answer never enter the ledger, so asking does not teach the
 model the fact. A task's tool call does enter it, because a task really changes the environment.
+
+A pacing turn stays in history, as it would in a real session. That matters for the cost as well as the shape: a cache
+entry ends on the request's last block, so a request whose prompt is then thrown away leaves an entry nothing can match.
 """
 from __future__ import annotations
 
@@ -10,7 +13,7 @@ from dataclasses import dataclass, field
 
 from eunoe.interfaces import Block, CallUsage, ModelTurn, RenderedContext
 from eunoe.judge import score_probe
-from eunoe.ledger import ASSISTANT
+from eunoe.ledger import ASSISTANT, USER
 from eunoe.tasks.session import EventSpec, ScriptedSession
 from eunoe.wire import to_text
 
@@ -63,6 +66,7 @@ class SessionRun:
         self.now = 0.0
         self.last_call_at = 0.0
         self.last = CallUsage()
+        self.last_history = 0
         self.spend_log = spend_log
         self.result = SessionResult(session.id, strategy.name, session.seed, session.domain)
         self.replay_thinking = driver.capabilities.replays_scripted_thinking
@@ -87,7 +91,18 @@ class SessionRun:
         gap = self.now - self.last_call_at
         ctx = self.strategy.prepare(self.now, self.last, gap)
         ctx.meta.update(meta)
+        history = len(ctx.blocks)
         ctx.blocks = list(ctx.blocks) + list(extra) + [Block("user", "text", text=prompt, event_id="prompt")]
+        # A breakpoint at the end of the history writes an entry a later request can read, whatever this prompt was,
+        # and one where the last request's history ended still reaches back after a long gap. A harness that can't
+        # place breakpoints ignores both.
+        points = list(ctx.meta.get("breakpoints", ()))
+        if history:
+            points.append(history - 1)
+        if self.last_history and self.last_history <= history:
+            points.append(self.last_history - 1)
+        ctx.meta["breakpoints"] = sorted(set(points))
+        self.last_history = history
         return ctx
 
     def _call(self, ctx: RenderedContext) -> ModelTurn:
@@ -118,7 +133,11 @@ class SessionRun:
             self.spend_log(usage, self.cost.price(usage, self.ttl))
 
     def _turn(self, prompt: str, meta: dict) -> ModelTurn:
-        return self._call(self._context(prompt, meta))
+        turn = self._call(self._context(prompt, meta))
+        if not turn.error:
+            self.strategy.observe(EventSpec(USER, prompt), self.now)
+            self.strategy.observe(EventSpec(ASSISTANT, turn.text or " "), self.now)
+        return turn
 
     def _lookup(self, call) -> list:
         """A lookup's call and result, kept only for this question."""

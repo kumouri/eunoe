@@ -279,6 +279,16 @@ class ClaudeCliTest(unittest.TestCase):
                          (1, 2, 1, 2, 4))
         self.assertEqual(claude_usage({"cache_creation_input_tokens": 9}).cache_write_5m, 9)
 
+    def test_the_scratch_project_folder_goes_with_what_the_cli_put_in_it(self):
+        with tempfile.TemporaryDirectory() as config:
+            harness = self._harness(config_dir=config)
+            scratch = harness._dir()
+            folder = os.path.join(config, "projects", "".join(c if c.isalnum() else "-" for c in os.path.realpath(scratch)))
+            os.makedirs(os.path.join(folder, "memory"))
+            harness.cleanup()
+            self.assertFalse(os.path.exists(folder))
+            self.assertFalse(os.path.exists(scratch))
+
     def test_session_files_get_edited_and_cleaned_up(self):
         with tempfile.TemporaryDirectory() as config:
             sid = "44444444-4444-4444-4444-444444444444"
@@ -298,7 +308,6 @@ class ClaudeCliTest(unittest.TestCase):
             self.assertEqual(first, harness.snapshot())
             harness.cleanup()
             self.assertFalse(os.path.exists(path))
-            self.assertFalse(os.path.exists(folder))
 
     def test_cleanup_leaves_everything_else_alone(self):
         with tempfile.TemporaryDirectory() as config:
@@ -641,6 +650,16 @@ class LiveDriverTest(unittest.TestCase):
         self.assertIn("thinking-binding-controls-2026-08-01", headers["anthropic-beta"])
         self.assertEqual(body["thinking"]["block_binding"]["prefix_mismatch_behavior"], "drop_block")
 
+    def test_api_driver_places_a_second_breakpoint(self):
+        driver = ClaudeApiDriver("claude-haiku-5-5", SpendGate(allow=True), FakeTransport(),
+                                 {"EUNOE_ANTHROPIC_API_KEY": "k"}, ttl="1h")
+        ctx = RenderedContext("", [Block("user", "text", text="a"), Block("assistant", "text", text="b"),
+                                   Block("user", "text", text="c")], [], {"breakpoints": [0]})
+        _, body = driver.request(ctx)
+        self.assertEqual(body["messages"][0]["content"][0]["cache_control"], {"type": "ephemeral", "ttl": "1h"})
+        self.assertNotIn("cache_control", body["messages"][2]["content"][0])
+        self.assertEqual(body["cache_control"], {"type": "ephemeral", "ttl": "1h"})
+
     def test_api_driver_refuses_without_permission(self):
         driver = ClaudeApiDriver("claude-haiku-5-5", SpendGate(), FakeTransport(), {"EUNOE_ANTHROPIC_API_KEY": "k"})
         with self.assertRaises(SpendRefused):
@@ -651,6 +670,57 @@ class LiveDriverTest(unittest.TestCase):
         self.assertEqual((turn.tool_calls[0].name, turn.tool_calls[0].args), ("recall", {"query": "X-1"}))
         self.assertEqual(_from_text("ANSWER: 5", CallUsage(), 0.0).tool_calls, [])
         self.assertEqual(_from_text("TOOL recall not-json", CallUsage(), 0.0).tool_calls, [])
+        self.assertEqual(_from_text('TOOL apply ["not", "an", "object"]', CallUsage(), 0.0).tool_calls, [])
+
+    def _cli_driver(self, config, *script):
+        driver = ClaudeCliDriver("claude-haiku-5-5", environ={"PATH": "x"})
+        driver.harness.config_dir = config
+        driver.harness.runner = FakeRunner(*script)
+        driver.harness._version = "2.1.309"
+        return driver
+
+    def test_cli_driver_appends_and_never_rewrites_until_an_edit(self):
+        with tempfile.TemporaryDirectory() as config:
+            driver = self._cli_driver(config, claude_result("OK"), claude_result("OK"), claude_result("OK"))
+            one = Block("user", "text", text="first", event_id="e1")
+            two = Block("assistant", "text", text="second", event_id="e2")
+            prompt = Block("user", "text", text="go", event_id="prompt")
+            driver.call(RenderedContext("", [one, prompt]))
+            self.assertEqual(driver.rewrites, 1)
+            driver.call(RenderedContext("", [one, Block("user", "text", text="go", event_id="e3"),
+                                             Block("assistant", "text", text="OK", event_id="e4"), two, prompt]))
+            self.assertEqual(driver.rewrites, 1, "unchanged history must append, not rewrite")
+            path = driver.harness.session_path()
+            text = open(path, encoding="utf-8").read()
+            self.assertIn("second", text)
+            driver.call(RenderedContext("", [Block("user", "text", text="EDITED", event_id="e1"), prompt]))
+            self.assertEqual(driver.rewrites, 2)
+            driver.close()
+
+    def test_cli_driver_forks_a_probe_so_it_teaches_nothing(self):
+        with tempfile.TemporaryDirectory() as config:
+            forked = claude_result("ANSWER: x", session="99999999-9999-9999-9999-999999999999")
+            driver = self._cli_driver(config, forked)
+            prompt = Block("user", "text", text="What is it?", event_id="prompt")
+            turn = driver.call(RenderedContext("", [Block("user", "text", text="first", event_id="e1"), prompt], [],
+                                               {"mode": "probe"}))
+            self.assertEqual(turn.text, "ANSWER: x")
+            self.assertIn("--fork-session", driver.harness.runner.calls[0]["argv"])
+            self.assertEqual(len(driver.written), 1)
+            driver.close()
+
+    def test_cli_driver_carries_a_lookup_in_the_prompt(self):
+        with tempfile.TemporaryDirectory() as config:
+            forked = claude_result("ANSWER: x", session="99999999-9999-9999-9999-999999999998")
+            driver = self._cli_driver(config, forked)
+            blocks = [Block("user", "text", text="first", event_id="e1"),
+                      Block("assistant", "tool_use", name="recall", input={"query": "q"}, tool_id="l"),
+                      Block("user", "tool_result", text="the found text", tool_id="l"),
+                      Block("user", "text", text="What is it?", event_id="prompt")]
+            driver.call(RenderedContext("", blocks, [], {"mode": "probe", "looked_up": True}))
+            self.assertIn("the found text", driver.harness.runner.calls[0]["input"])
+            self.assertEqual(len(driver.written), 1)
+            driver.close()
 
     def test_only_named_drivers_exist(self):
         self.assertIsInstance(make_driver("claude-cli", model="m", gate=SpendGate(), ttl="1h"), ClaudeCliDriver)

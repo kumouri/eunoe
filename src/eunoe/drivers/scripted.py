@@ -25,7 +25,8 @@ from eunoe.rng import Rng
 
 class ScriptedDriver:
     def __init__(self, seed: int = 0, ttl: str = "5m", binding: bool = False, lookup_rate: float = 0.6,
-                 blind_lookup_rate: float = 0.1, guess_rate: float = 0.15, reply_tokens: int = 30) -> None:
+                 blind_lookup_rate: float = 0.1, guess_rate: float = 0.15, reply_tokens: int = 30,
+                 places_breakpoints: bool = True) -> None:
         self.capabilities = DriverCaps("scripted", "bound" if binding else "none", ("5m", "1h"),
                                        replays_scripted_thinking=True)
         self.cache = PrefixCache(ttl, binding)
@@ -33,10 +34,14 @@ class ScriptedDriver:
         self.seed = seed
         self.lookup_rate, self.blind_lookup_rate, self.guess_rate = lookup_rate, blind_lookup_rate, guess_rate
         self.reply_tokens = reply_tokens
+        #: An API driver places breakpoints. A CLI can't: set this False to see what its door costs.
+        self.places_breakpoints = places_breakpoints
 
     def call(self, request: RenderedContext) -> ModelTurn:
         now = float(request.meta.get("now", 0.0))
         turn = self._decide(request)
+        if not self.places_breakpoints:
+            request.meta = {k: v for k, v in request.meta.items() if k != "breakpoints"}
         try:
             usage = self.cache.call(request, now, estimate_tokens(turn.text) + self.reply_tokens)
         except ThinkingBindingError as exc:

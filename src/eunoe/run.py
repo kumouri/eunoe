@@ -90,8 +90,10 @@ def main(args) -> int:
                     strategy = build_arm(arm, budget=config["budget"], system=system, tools=agent.tools(),
                                          thinking=config["thinking"], schedule=config.get("schedule"))
                     driver = build_driver(config, f"{seed}:{name}", gate)
+                    log = _call_log(os.path.join(args.out, "calls.jsonl"), arm, session.id)
                     try:
-                        results.append(SessionRun(session, strategy, driver, ListPrice(config["model"]), config["ttl"]).run())
+                        results.append(SessionRun(session, strategy, driver, ListPrice(config["model"]), config["ttl"],
+                                                  spend_log=log).run())
                     finally:
                         if hasattr(driver, "close"):
                             driver.close()
@@ -117,6 +119,17 @@ def main(args) -> int:
         json.dump(manifest, fh, indent=2, default=str)
     print(f"Manifest: {path}. API dollars spent: {round(gate.spent_usd, 6)}.")
     return 0
+
+
+def _call_log(path: str, arm: str, session: str):
+    """One row per call as it happens, so a run that is cut short still keeps what it measured."""
+
+    def write(usage, usd: float) -> None:
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"arm": arm, "session": session, "input": usage.input, "cache_read": usage.cache_read,
+                                 "cache_write": usage.cache_write, "output": usage.output, "list_usd": round(usd, 6)}) + "\n")
+
+    return write
 
 
 def _session_recall(results: list) -> list:

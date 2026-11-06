@@ -33,7 +33,7 @@ HEADLINE_CHARS = 160
 
 
 def estimate_tokens(text: str) -> int:
-    """A declared estimate. Providers report real tokens; the kit only needs relative sizes here."""
+    """A declared estimate, and it runs low on number-heavy logs. Real usage comes from the provider."""
     return int(len(text) / CHARS_PER_TOKEN) + 1 if text else 0
 
 

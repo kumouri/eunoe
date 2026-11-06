@@ -162,7 +162,9 @@ class Suite:
 
     def _thinking(self) -> StepResult:
         h = self.h
-        if self.skip_thinking or not h.thinking_supported:
+        if self.skip_thinking:
+            return StepResult("5b thinking", "SKIPPED", "--skip-thinking")
+        if not h.thinking_supported:
             return StepResult("5b thinking", "UNSUPPORTED", "this harness has no thinking blocks to test")
         turn = self._note(h.start(
             f"Remember this codeword: {SECOND_CODEWORD}. The rest of this message is padding, ignore it: {self.padding} . "

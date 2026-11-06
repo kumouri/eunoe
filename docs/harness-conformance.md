@@ -76,6 +76,29 @@ with `-low`. `agy --version` can hang, so the kit reads its changelog.
 **Ollama.** You own the list, so an edit is sending something different. `prompt_eval_count` counts only what it
 evaluated, so it can't show a read. It honours `OLLAMA_HOST`. Pass `--model` for one you have.
 
+## Keep one session on a CLI door
+
+Conformance shows an edit lands. It doesn't show what a whole session costs, so here is one, on `claude-haiku-5-5` with a
+synthetic fixture and no management:
+
+| How the driver used the door | Calls | Read | Written |
+|---|---:|---:|---:|
+| A new session file for every call | 38 | 118 thousand | 5.9 million |
+| One session: events appended, a pacing turn resumed in place, a probe forked | 38 | 6.0 million | 281 thousand |
+| One session, but 40 events between calls | 6 | 16 thousand | 198 thousand |
+
+The first row is why the driver doesn't do that. A new session's opening rows land somewhere else each time, so no
+request can read the last one's entry, with the conversation itself unchanged. So `ClaudeCliDriver` keeps one session and
+rewrites the file only when an edit really lands, and that restart is what an edit costs on this door.
+
+The third row is the documented lookup limit: at most 20 positions back from a breakpoint [D]. A CLI gives you no way to
+place a second breakpoint, so keep `paced_every` low on a CLI door. The API driver places one itself, and `cachesim.py`
+models the rule. Those three rows are one run each.
+
+**Token estimates run low on these fixtures.** Their logs tokenise at about 2 characters a token on that model, against
+the kit's declared estimate of 4. Budgets on a real driver should come from reported usage, and a scored run has to
+measure what it held.
+
 ## What this doesn't show
 
 Conformance says a door works, not that a contracting arm is any good. It uses one small model per harness, so a

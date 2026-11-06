@@ -177,7 +177,10 @@ class CliTest(unittest.TestCase):
             manifests = [f for f in os.listdir(folder) if f.startswith("run-")]
             self.assertEqual(len(manifests), 1)
             data = json.load(open(os.path.join(folder, manifests[0]), encoding="utf-8"))
+            calls = open(os.path.join(folder, "calls.jsonl"), encoding="utf-8").read().splitlines()
         self.assertEqual(data["seeds"], [1, 2])
+        self.assertTrue(calls)
+        self.assertEqual(set(json.loads(calls[0])), {"arm", "session", "input", "cache_read", "cache_write", "output", "list_usd"})
         self.assertEqual(data["api_usd_spent"], 0.0)
         self.assertEqual(len(data["fixtures"]), 2)
 

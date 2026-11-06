@@ -307,6 +307,39 @@ class RunnerTest(unittest.TestCase):
         rows = run_arms(("C0", "C1"), "demo", (1,), budget=8000)
         self.assertLess(rows["C1"][0]["probe_recall"], rows["C0"][0]["probe_recall"])
 
+    def test_a_generational_schedule_keeps_more_reads_than_a_plain_batch(self):
+        session = generate_session("oncall", 1, get_profile("demo"))
+        results = {}
+        for spec in ("threshold:12000:8000", "generational:12000:8000:0.5"):
+            strategy = build_arm("T2", budget=8000, schedule=spec)
+            results[spec] = SessionRun(session, strategy, ScriptedDriver(seed="1:oncall"), ListPrice(), "5m").run()
+        self.assertGreater(results["generational:12000:8000:0.5"].usage.cache_read, results["threshold:12000:8000"].usage.cache_read)
+
+    def test_a_pacing_turn_stays_in_history_and_a_probe_does_not(self):
+        session = generate_session("oncall", 1, get_profile("tiny"))
+        strategy = build_arm("C0", budget=2000)
+        SessionRun(session, strategy, ScriptedDriver(), ListPrice(), "5m").run()
+        self.assertTrue(any(e.text.startswith("Continue.") for e in strategy.ledger.events))
+
+    def test_a_breakpoint_keeps_reads_a_long_gap_would_lose(self):
+        session = generate_session("oncall", 1, get_profile("demo"))
+        reads = {}
+        for places in (True, False):
+            strategy = build_arm("C0", budget=8000)
+            driver = ScriptedDriver(seed="1:oncall", places_breakpoints=places)
+            reads[places] = SessionRun(session, strategy, driver, ListPrice(), "5m").run().usage
+        self.assertGreater(reads[True].cache_read, 3 * reads[True].cache_write)
+        self.assertGreater(reads[True].cache_read, reads[False].cache_read)
+
+    def test_a_door_with_no_breakpoints_loses_a_frozen_regions_reads(self):
+        session = generate_session("oncall", 1, get_profile("demo"))
+        reads = {}
+        for places in (True, False):
+            strategy = build_arm("T2", budget=8000, schedule="generational:12000:8000:0.5")
+            driver = ScriptedDriver(seed="1:oncall", places_breakpoints=places)
+            reads[places] = SessionRun(session, strategy, driver, ListPrice(), "5m").run().usage.cache_read
+        self.assertGreater(reads[True], reads[False])
+
     def test_bound_account_with_allow_records_the_failure(self):
         session = generate_session("oncall", 1, get_profile("demo"))
         strategy = build_arm("T2", budget=5000, thinking="allow")
