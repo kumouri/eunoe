@@ -19,7 +19,7 @@ SYSTEM_NOTE = "system_note"
 FILE = "file"
 TOOL_PREFIX = "tool:"
 #: A read tool's result is the file, so the file is the archive.
-RECONSTRUCTIBLE_TOOLS = ("tool:read_file", "tool:read_runbook", "tool:read_contract", "tool:fetch_paper")
+RECONSTRUCTIBLE_TOOLS = ("tool:read_file", "tool:read_runbook", "tool:read_contract", "tool:fetch_paper", "tool:Read")
 _WORD_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:/-]*")
 
 

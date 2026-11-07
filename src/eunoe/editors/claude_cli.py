@@ -55,6 +55,7 @@ class ClaudeCliHarness(Harness):
         self.current = ""
         self.extra_args: list = []
         self._version: str | None = None
+        self.timeout = 240.0
 
     def available(self) -> tuple:
         if is_offline(self.environ):
@@ -87,7 +88,7 @@ class ClaudeCliHarness(Harness):
                 "--strict-mcp-config", "--setting-sources", "project,local", *self.extra_args, *extra]
 
     def _run(self, prompt: str, *extra) -> Turn:
-        done = self.runner(self._argv(*extra), cwd=self._dir(), env=self._env(), input_text=prompt, timeout=240)
+        done = self.runner(self._argv(*extra), cwd=self._dir(), env=self._env(), input_text=prompt, timeout=self.timeout)
         try:
             data = json.loads(done.stdout)
         except ValueError:
