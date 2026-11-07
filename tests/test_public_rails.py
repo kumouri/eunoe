@@ -12,7 +12,9 @@ import subprocess
 import tempfile
 import unittest
 
+from eunoe.arms import build_arm
 from eunoe.cli import main
+from eunoe.drivers.base import SpendGate
 from eunoe.replay.surface import rates, real_cost, replay_cost, schedule_grid
 from eunoe.replay.usage import read_usage
 
@@ -183,6 +185,18 @@ class CliTest(unittest.TestCase):
         self.assertEqual(set(json.loads(calls[0])), {"arm", "session", "input", "cache_read", "cache_write", "output", "list_usd"})
         self.assertEqual(data["api_usd_spent"], 0.0)
         self.assertEqual(len(data["fixtures"]), 2)
+
+    def test_a_provider_control_asks_the_provider_on_a_driver_that_can(self):
+        from eunoe.run import build_driver, load_config
+
+        with tempfile.TemporaryDirectory() as folder:
+            config = os.path.join(folder, "c.toml")
+            with open(config, "w", encoding="utf-8") as fh:
+                fh.write('driver = "claude-api"\nmodel = "claude-haiku-5-5"\n')
+            driver = build_driver(load_config(config), "1", SpendGate())
+        self.assertTrue(driver.capabilities.server_edits)
+        strategy = build_arm("C1", budget=1000, server_side=driver.capabilities.server_edits)
+        self.assertFalse(strategy.manifest()["emulated"])
 
     def test_a_real_model_run_waits_for_yes(self):
         with tempfile.TemporaryDirectory() as folder:

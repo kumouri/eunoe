@@ -87,9 +87,11 @@ def main(args) -> int:
                     fingerprints[session.id] = session.fingerprint()
                     agent = DefaultAgent(DOMAINS[name].brief, session.tool_specs)
                     system = agent.instructions + (RECALL_NOTE if arm.startswith("T") else "")
-                    strategy = build_arm(arm, budget=config["budget"], system=system, tools=agent.tools(),
-                                         thinking=config["thinking"], schedule=config.get("schedule"))
                     driver = build_driver(config, f"{seed}:{name}", gate)
+                    # A control that is a provider's feature asks the provider when the driver can.
+                    strategy = build_arm(arm, budget=config["budget"], system=system, tools=agent.tools(),
+                                         thinking=config["thinking"], schedule=config.get("schedule"),
+                                         server_side=driver.capabilities.server_edits)
                     log = _call_log(os.path.join(args.out, "calls.jsonl"), arm, session.id)
                     try:
                         results.append(SessionRun(session, strategy, driver, ListPrice(config["model"]), config["ttl"],
