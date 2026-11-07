@@ -17,7 +17,7 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         python: ['3.11', '3.13']
     env:
-      # CI can never spend: no key exists here, and the kit refuses a paid call without --allow-spend.
+      # CI can never spend: no key exists here, and nothing leaves the machine with this set.
       EUNOE_OFFLINE: "1"
     steps:
       - uses: actions/checkout@v6
@@ -30,3 +30,7 @@ jobs:
         run: python -m compileall -q src tests
       - name: Tests
         run: python -m unittest discover -s tests -t .
+      - name: Demo, from the installed package
+        run: python -m eunoe demo --quick
+      - name: Conformance on the offline harness
+        run: python -m eunoe conform

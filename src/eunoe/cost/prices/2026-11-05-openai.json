@@ -1,0 +1,14 @@
+{
+  "provider": "openai",
+  "read_on": "2026-11-05",
+  "source": "https://developers.openai.com/api/docs/guides/prompt-caching",
+  "unit": "USD per million tokens",
+  "note": "Only the cache multipliers were read from the provider's page, so no per-token model rates are pinned yet. A run on these models reports tokens and no list price until this file has them.",
+  "cache_multipliers": {
+    "read_gpt_6_1": 0.05,
+    "read_other": 0.1,
+    "write_30m_gpt_5_6_and_later": 1.25,
+    "write_12h_gpt_5_6_and_later": 2.5
+  },
+  "models": {}
+}

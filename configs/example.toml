@@ -1,0 +1,18 @@
+# A small comparison on the scripted driver: no key, no model, nothing to spend.
+# `python -m eunoe run --config configs/example.toml --seeds 3`
+#
+# The first arm is the baseline for every interval it prints.
+arms = ["C0", "C1", "C3", "T1", "T2", "T3", "T4"]
+profile = "demo"
+budget = 20000
+seeds = 1
+ttl = "5m"
+thinking = "strip_on_edit"
+driver = "scripted"
+model = "claude-sonnet-5-5"
+domains = ["oncall", "smallbiz", "research"]
+
+# To size a run without touching code:
+# [profile_overrides]
+# steps = 300
+# mean_result_chars = 5000

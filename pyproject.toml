@@ -12,6 +12,14 @@ license = { text = "MIT" }
 authors = [{ name = "Ceryce Armstrong" }]
 dependencies = []
 
+[project.optional-dependencies]
+# Every extra is for one optional arm or harness. The kit itself imports nothing outside the standard library.
+agent-sdk = ["claude-agent-sdk"]
+lethe = ["lethe-llm-context>=0.7"]
+
+[project.urls]
+Repository = "https://github.com/kumouri/eunoe"
+
 [project.scripts]
 eunoe = "eunoe.cli:main"
 
