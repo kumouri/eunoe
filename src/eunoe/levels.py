@@ -3,7 +3,7 @@
 | Level | What stays |
 |---|---|
 | L0 Verbatim | Everything |
-| L1 Trimmed | Structure: head and tail, line counts, error lines, exit code |
+| L1 Trimmed | Structure: head and tail, line counts, error lines, exit code, and whatever L2 would keep |
 | L2 Digest | Facts: names, numbers, paths, decisions, outcome |
 | L3 Headline | One line: what, and how it came out |
 | L4 Gone | Nothing in context; the archive still holds it |
@@ -30,6 +30,7 @@ class Level(IntEnum):
 
 CHARS_PER_TOKEN = 4.0
 HEADLINE_CHARS = 160
+DIGEST_SHARE = 0.06
 
 
 def estimate_tokens(text: str) -> int:
@@ -83,11 +84,16 @@ def trim(text: str) -> str:
     code = _EXIT_RE.search(text)
     if code and code.group(0) not in head and code.group(0) not in tail:
         parts.append(f"exit code {code.group(1)}")
+    # L1 has to hold whatever L2 would, or stepping down a level could bring a fact back. Measured on forks: without this
+    # line, a fact in the middle of an output was gone at L1 and still there at L2.
+    kept = digest(text[window:-window], max(120, int(DIGEST_SHARE * n)))
+    if kept:
+        parts.append(f"[details in the trimmed part: {kept}]")
     parts.append(tail.lstrip())
     return "\n".join(parts)
 
 
-def digest(text: str) -> str:
+def digest(text: str, budget: int | None = None) -> str:
     """L2: details from the text, those on error lines first, up to 6% of its size."""
     details = find_details(text)
     if not details:
@@ -103,7 +109,8 @@ def digest(text: str) -> str:
         i = bisect.bisect_right(starts, pos) - 1
         return i >= 0 and pos <= spans[i][1]
 
-    budget = max(120, int(0.06 * len(text)))
+    if budget is None:
+        budget = max(120, int(DIGEST_SHARE * len(text)))
     kept, seen, spent = [], set(), 0
     for detail, _, _ in sorted(details, key=lambda d: (not on_error(d[2]), d[2])):
         if detail in seen:
@@ -128,10 +135,13 @@ def first_sentence(text: str) -> str:
 
 
 def first_last_paragraphs(text: str) -> str:
+    """L1 for prose: the first and last paragraphs, and from the middle only the sentences L2 would keep."""
     paragraphs = [p for p in re.split(r"\n\s*\n", text or "") if p.strip()]
     if len(paragraphs) <= 2:
         return text
-    return f"{paragraphs[0]}\n\n[{len(paragraphs) - 2} paragraphs trimmed]\n\n{paragraphs[-1]}"
+    middle = [s.strip() for p in paragraphs[1:-1] for s in _SENTENCE_RE.split(p) if _DECISION_RE.search(s) or find_details(s)]
+    kept = f"\n\n{' '.join(middle)}" if middle else ""
+    return f"{paragraphs[0]}\n\n[{len(paragraphs) - 2} paragraphs trimmed]{kept}\n\n{paragraphs[-1]}"
 
 
 def key_sentences(text: str) -> str:

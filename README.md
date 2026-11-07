@@ -10,8 +10,9 @@ model can still see that there is more to look up.
 The questions, plainly: does contracting beat compaction, on what measures, and at what cost? Is there
 a region where performance rises and cost falls? What is acceptable to forget?
 
-**Status: phase 1, the kit.** The machinery below works and is tested. No scored result exists yet, and
-nothing here is a finding. The design is [`docs/design.md`](docs/design.md).
+**Status: phase 2, importance, on generated sessions.** The machinery below works and is tested. No scored result
+exists yet. What a pilot found on generated sessions is in [`docs/importance.md`](docs/importance.md), and it reads the
+generator as much as anything. The design is [`docs/design.md`](docs/design.md).
 
 ## Run it
 
@@ -54,7 +55,7 @@ has a stable id and an untouched copy in an archive, and is held at a level:
 | Level | What stays | How it is made |
 |---|---|---|
 | L0 Verbatim | Everything | As it arrived |
-| L1 Trimmed | Head and tail, counts, error lines, exit code | Code |
+| L1 Trimmed | Head and tail, counts, error lines, exit code, and whatever L2 would keep | Code |
 | L2 Digest | Names, numbers, paths, decisions, outcome | Code |
 | L3 Headline | One line: what, and how it came out | Code |
 | L4 Gone | Nothing in context; the archive still has it | The last resort |
@@ -104,6 +105,9 @@ CI can never spend. A subscription harness runs with every metered key scrubbed 
 paid harness reads its key only from a variable named for this kit (`EUNOE_ANTHROPIC_API_KEY`,
 `EUNOE_OPENAI_API_KEY`, `EUNOE_GEMINI_API_KEY`), needs `--allow-spend`, stops at `--spend-cap`, and writes
 every call to `spend.jsonl`. With `EUNOE_OFFLINE=1` nothing leaves the machine.
+
+To find out what matters, step part of a context down a level and ask what it lost, on generated sessions or on your own Claude
+Code session files. [`docs/importance.md`](docs/importance.md) has the commands and what they found.
 
 Results go to `eunoe-results/`, which git ignores. A conformance report holds no path, session id or
 account name.

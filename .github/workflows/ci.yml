@@ -34,3 +34,8 @@ jobs:
         run: python -m eunoe demo --quick
       - name: Conformance on the offline harness
         run: python -m eunoe conform
+      - name: Fork ablation on the scripted door
+        run: |
+          python -m eunoe ablate train --door scripted --seeds 5 --domains oncall --out forks-smoke
+          python -m eunoe ablate fit --out forks-smoke
+          python -m eunoe ablate test --door scripted --seeds 6 --domains oncall --out forks-smoke

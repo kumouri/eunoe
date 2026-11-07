@@ -61,9 +61,10 @@ resume refuses. Cached tokens on an edit stayed at the part before the edit in m
 
 **Codex under reasoning: the edit is accepted, and the answer doesn't always hold.** The same turn asking for the
 codeword, on `gpt-6-luna`: **unedited, 6 of 6 answered it; edited under its reasoning items, 7 of 11**. The rest were
-refusals or "I don't know", and none was an error. That is a small sample on a synthetic codeword, and it doesn't say
-why. It is why a step reports `INCONCLUSIVE` rather than `PASS` when the edit is accepted and the answer doesn't hold,
-and why dropping thinking on edit stays the default until a scored run says otherwise.
+refusals or "I don't know", and none was an error. That was a small sample, and a paired re-test explains it: the edit isn't the cause. A session that never had
+the padding and was never edited declined just as often, 8 of 20 against 8 of 20, and unedited sessions declined 3 of 20 too. The model
+reads a codeword next to the words "ignore it" as something not to reveal. [`importance.md`](importance.md) has the table. A step
+still reports `INCONCLUSIVE` rather than `PASS` when the edit is accepted and the answer doesn't hold.
 
 **Antigravity (`agy`).** A conversation is a SQLite file whose rows hold protobuf, and the same text sits in
 `steps.step_payload` and `gen_metadata.data`. The kit doesn't parse protobuf, so an edit keeps the byte length: a

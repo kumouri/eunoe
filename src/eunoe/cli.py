@@ -87,6 +87,12 @@ def _cmd_replay(args) -> int:
     return replay_main(args)
 
 
+def _cmd_ablate(args) -> int:
+    from eunoe.forks.experiment import main as ablate_main
+
+    return ablate_main(args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="eunoe", description=__doc__)
     parser.add_argument("--version", action="version", version=__version__)
@@ -128,6 +134,20 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--estimate-only", action="store_true")
     run.add_argument("--yes", action="store_true", help="skip the confirmation before a run that uses a real model")
     run.set_defaults(func=_cmd_run)
+
+    ablate = sub.add_parser("ablate", help="fork ablation on generated sessions: train S8, then compare signals")
+    ablate.add_argument("stage", choices=("train", "fit", "test", "report"))
+    ablate.add_argument("--door", default="cli", choices=("cli", "scripted"), help="scripted runs offline with no model")
+    ablate.add_argument("--model", default="claude-sonnet-5-5")
+    ablate.add_argument("--rate-model", default="claude-haiku-5-5", help="the small model behind S7")
+    ablate.add_argument("--seeds", default="", help="comma-separated; defaults keep training and test apart")
+    ablate.add_argument("--domains", default="")
+    ablate.add_argument("--only", default="", help="comma-separated condition names, for the smallest real sample first")
+    ablate.add_argument("--marker", default="M0", choices=("M0", "M1", "M2"))
+    ablate.add_argument("--max-errors", type=int, default=3, help="stop after this many conditions with an error")
+    ablate.add_argument("--run-id", default="ablate")
+    ablate.add_argument("--out", default=DEFAULT_OUT)
+    ablate.set_defaults(func=_cmd_ablate)
 
     replay = sub.add_parser("replay", help="read-only: cost surface and usage from your own CLI transcripts")
     replay.add_argument("transcripts", nargs="+", help="session JSONL files")
